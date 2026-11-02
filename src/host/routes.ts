@@ -6,10 +6,11 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ReminderStore } from './store.ts'
+import type { HolidaySync } from './holiday-sync.ts'
 import { sendSystemNotification } from './notifier.ts'
 import { generateIcalString } from '../core/ical.ts'
 
-export function registerReminderRoutes(ctx: Context, store: ReminderStore): () => void {
+export function registerReminderRoutes(ctx: Context, store: ReminderStore, holidaySync?: HolidaySync): () => void {
   const server = (ctx as any).webServer
   if (!server) return () => {}
 
@@ -198,6 +199,49 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     },
   })
 
+  // 9. 法定节假日 / 调休数据（休 / 班）
+  const d8 = server.register({
+    kind: 'exact',
+    path: '/api/reminders/holiday-data',
+    handler: async (req: any, res: any) => {
+      try {
+        const now = new Date()
+        const fallback = [now.getFullYear(), now.getFullYear() + 1]
+        let years = fallback
+        try {
+          const url = new URL(String(req.url || ''), 'http://127.0.0.1')
+          const raw = url.searchParams.get('years')
+          if (raw) {
+            const parsed = raw
+              .split(',')
+              .map((s) => Number(s.trim()))
+              .filter((y) => Number.isFinite(y) && y > 1900 && y < 2200)
+            if (parsed.length > 0) years = [...new Set(parsed)]
+          }
+        } catch {}
+
+        if (holidaySync) {
+          holidaySync.ensureFresh(years)
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+          res.end(
+            JSON.stringify({
+              ok: true,
+              marks: holidaySync.marksFor(years),
+              info: holidaySync.info(),
+            }),
+          )
+          return
+        }
+
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: true, marks: {}, info: { lastAttemptAt: 0, years: [] } }))
+      } catch (e: any) {
+        res.writeHead(500, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: String(e) }))
+      }
+    },
+  })
+
   return () => {
     d0()
     d1()
@@ -207,5 +251,6 @@ export function registerReminderRoutes(ctx: Context, store: ReminderStore): () =
     d5()
     d6()
     d7()
+    d8()
   }
 }

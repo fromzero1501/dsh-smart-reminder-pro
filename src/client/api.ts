@@ -89,4 +89,21 @@ export class ReminderApi {
       return { ok: false, message: '请求失败' }
     }
   }
+
+  /** 法定节假日 / 调休数据（休 / 班）。失败时返回空表，由内置兜底表接管 */
+  async getHolidayData(years: number[]): Promise<{
+    ok: boolean
+    marks: Record<string, 'rest' | 'work'>
+    info: { lastAttemptAt: number; years: Array<{ year: number; published: boolean; fetchedAt: number; source: string }> }
+  }> {
+    const empty = { ok: false, marks: {}, info: { lastAttemptAt: 0, years: [] } }
+    try {
+      const res = await fetch(`/api/reminders/holiday-data?years=${years.join(',')}`)
+      const json = await res.json()
+      if (!json || !json.ok) return empty
+      return { ok: true, marks: json.marks || {}, info: json.info || empty.info }
+    } catch {
+      return empty
+    }
+  }
 }

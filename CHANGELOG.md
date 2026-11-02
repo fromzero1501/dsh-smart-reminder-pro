@@ -2,6 +2,25 @@
 
 本文件记录 `dsh-smart-reminder` 的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.1.32] - 2026-11-02
+
+法定节假日与调休（休 / 班）改为自动更新。
+
+### Added
+
+- **节假日数据自动同步**（host 侧，新增 `src/host/holiday-sync.ts`）：从 NateScarlet/holiday-cn 的年度 JSON 拉取官方放假安排（每份数据带国务院通知原文链接）。
+  - 镜像按国内可达性排序回退：fastly.jsdelivr.net → gcore.jsdelivr.net → ghproxy.net → raw.githubusercontent.com（2026-11 实测前两个直连可用，GitHub raw 与 cdn.jsdelivr.net 直连被重置）。
+  - 每天最多真正拉取一次（成功失败都记时间戳），插件启动后延迟若干秒异步触发，不做常驻定时器。
+  - 缓存落盘 `$DSH_HOME/smart-reminder-holidays.json`（按年份存原始 days + 抓取时间 + 来源），不写 profile 配置、不碰 reminders.json。
+  - 校验从严：year 必须等于请求年份、每条 date 必须是真实日历日期、name 为字符串、isOffDay 为布尔；任一条不合规整批丢弃。空 days 视为「该年安排尚未公布」，不覆盖已有有效数据。
+  - 三层优先级：运行时缓存 → 内置 2026 表（`src/core/statutory.ts`）→ 无标记不显示角标。
+- **新接口** `GET /api/reminders/holiday-data?years=2026,2027`：返回 `{ ok, marks: {"YYYY-MM-DD": "rest"|"work"}, info }`。
+- **面板数据版本**：日历看板底部一行灰字显示「节假日数据 2026 · 更新于 11-02」；某年未公布显示「2027 年安排尚未公布」；只有内置数据时显示「节假日数据：内置表」。不加按钮，不做交互。
+
+### Fixed
+
+- 内置 2026 表漏了 `2026-09-20`（国办发明电〔2025〕7 号：国庆节 9 月 20 日周日、10 月 10 日周六上班），已补上；与 holiday-cn 数据逐日比对 365 天已零差异。
+
 ## [0.1.31] - 2026-11-02
 
 按参考万年历对齐收录与版式（第二轮）。

@@ -160,6 +160,12 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all')
 
   const [deletedCache, setDeletedCache] = useState<ReminderItem | null>(null)
+  // 法定节假日 / 调休数据（host 侧同步后通过本地接口下发；拉不到时回退内置表）
+  const [holidayMarks, setHolidayMarks] = useState<Record<string, 'rest' | 'work'>>({})
+  const [holidayInfo, setHolidayInfo] = useState<{
+    lastAttemptAt: number
+    years: Array<{ year: number; published: boolean; fetchedAt: number; source: string }>
+  }>({ lastAttemptAt: 0, years: [] })
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverDate, setDragOverDate] = useState<string | null>(null)
 
@@ -298,6 +304,31 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth() + 1
+
+  // 节假日数据：跟随当前显示年份，host 侧每天最多真正拉取一次
+  useEffect(() => {
+    let alive = true
+    void api.getHolidayData([year, year + 1]).then((res) => {
+      if (!alive) return
+      setHolidayMarks(res.marks)
+      setHolidayInfo(res.info)
+    })
+    return () => {
+      alive = false
+    }
+  }, [api, year])
+
+  // 节假日数据版本说明（只显示来源与时间，不做交互）
+  const holidayVersionText = (() => {
+    const entry = holidayInfo.years.find((y) => y.year === year)
+    if (entry && entry.published) {
+      const d = new Date(entry.fetchedAt)
+      const md = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return `节假日数据 ${year} · 更新于 ${md}`
+    }
+    if (holidayInfo.years.length > 0) return `${year} 年安排尚未公布`
+    return '节假日数据：内置表'
+  })()
 
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay()
   const totalDays = new Date(year, month, 0).getDate()
@@ -900,7 +931,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
               const isSelected = selectedDate === cell.dateKey
               const isToday = formatDateKey(new Date()) === cell.dateKey
               const isDragOver = dragOverDate === cell.dateKey
-              const statutory = getStatutoryMark(cell.year, cell.month, cell.day)
+              const statutory = holidayMarks[cell.dateKey] ?? getStatutoryMark(cell.year, cell.month, cell.day)
               const colorFor = (k: 'festival' | 'term' | 'seasonal' | 'lunarDay') =>
                 isToday
                   ? theme.todayText
@@ -1087,6 +1118,23 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
               )
             }),
           ),
+          // 节假日数据版本（仅中文界面，一行灰字，不可点）
+          lang === 'zh'
+            ? createElement(
+                'div',
+                {
+                  style: {
+                    marginTop: '8px',
+                    fontSize: '11px',
+                    lineHeight: '1.4',
+                    color: theme.textMuted,
+                    textAlign: 'center',
+                    userSelect: 'none',
+                  },
+                },
+                holidayVersionText,
+              )
+            : null,
         ),
 
         // 右侧事项详情与操作栏
