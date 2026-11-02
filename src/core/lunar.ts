@@ -31,42 +31,44 @@ const LUNAR_DAY_NAMES = [
   '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'
 ]
 
-/** 固定公历节日 (MMDD) */
+/** 固定公历节日 (MMDD)，收录与叫法对齐参考万年历 */
 const SOLAR_FESTIVALS: Record<string, string> = {
-  '0101': '元旦',
+  '0101': '元旦节',
+  '0202': '湿地日',
   '0214': '情人节',
   '0308': '妇女节',
   '0312': '植树节',
-  '0315': '消费者权益日',
+  '0315': '消费者日',
   '0401': '愚人节',
-  '0422': '世界地球日',
-  '0423': '世界读书日',
+  '0422': '地球日',
   '0501': '劳动节',
   '0504': '青年节',
+  '0508': '微笑日',
   '0512': '护士节',
-  '0531': '世界无烟日',
+  '0518': '博物馆日',
+  '0531': '无烟日',
   '0601': '儿童节',
-  '0605': '世界环境日',
-  '0626': '国际禁毒日',
-  '0701': '建党节',
+  '0623': '奥林匹克',
+  '0626': '禁毒日',
+  '0701': '建党日',
   '0801': '建军节',
-  '0903': '抗战胜利纪念日',
+  '0815': '日本投降',
   '0910': '教师节',
+  '0918': '九一八',
   '1001': '国庆节',
-  '1024': '程序员节',
-  '1031': '万圣节',
-  '1108': '记者节',
-  '1109': '消防日',
+  '1010': '辛亥革命',
+  '1025': '台湾光复',
+  '1031': '万圣夜',
+  '1101': '万圣节',
   '1111': '光棍节',
-  '1201': '世界艾滋病日',
-  '1204': '国家宪法日',
-  '1213': '国家公祭日',
+  '1201': '艾滋病日',
+  '1213': '公祭日',
+  '1220': '澳门回归',
   '1224': '平安夜',
   '1225': '圣诞节',
-  '1231': '跨年夜',
 }
 
-/** 固定农历节日 (MMDD) */
+/** 固定农历节日 (MMDD)，收录与叫法对齐参考万年历 */
 const LUNAR_FESTIVALS: Record<string, string> = {
   '0101': '春节',
   '0115': '元宵节',
@@ -75,12 +77,14 @@ const LUNAR_FESTIVALS: Record<string, string> = {
   '0505': '端午节',
   '0707': '七夕节',
   '0715': '中元节',
+  '0722': '财神节',
   '0815': '中秋节',
   '0909': '重阳节',
   '1001': '寒衣节',
-  '1015': '下元节',
   '1208': '腊八节',
-  '1223': '小年',
+  '1216': '尾牙',
+  '1223': '北方小年',
+  '1224': '南方小年',
 }
 
 /** 浮动公历节日：某月第 n 个星期几 */
@@ -157,6 +161,101 @@ function getWeekdayFestival(year: number, month: number, day: number): string | 
   return null
 }
 
+/* ---------------- 干支 / 数九 / 三伏 / 节气锚定节日 ---------------- */
+
+/** 某日的六十甲子序号（0 = 甲子）。以 2026-11-02 为庚辰（16）校准 */
+export function getGanZhiIndex(year: number, month: number, day: number): number {
+  const days = Math.floor(Date.UTC(year, month - 1, day) / 86400000)
+  return (((days + 17) % 60) + 60) % 60
+}
+
+/** 干支序号是否落在某个天干上（0=甲 … 4=戊 … 6=庚） */
+function isGanDay(date: Date, ganIndex: number): boolean {
+  return getGanZhiIndex(date.getFullYear(), date.getMonth() + 1, date.getDate()) % 10 === ganIndex
+}
+
+function addDays(date: Date, n: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n)
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+/** 取某年某个节气的公历日期 */
+function termDate(year: number, name: string): Date | null {
+  if (year < TERM_MIN_YEAR || year > TERM_MAX_YEAR) return null
+  const terms = computeSolarTerms(year)
+  for (const key of Object.keys(terms)) {
+    if (terms[key] === name) {
+      return new Date(year, Number(key.slice(0, 2)) - 1, Number(key.slice(2)))
+    }
+  }
+  return null
+}
+
+/** 数九：冬至起每九天一个九（一九…九九），共 81 天 */
+export function getNinthLabel(year: number, month: number, day: number): string | null {
+  const NINE = ['一九', '二九', '三九', '四九', '五九', '六九', '七九', '八九', '九九']
+  const date = new Date(year, month - 1, day)
+  let base = termDate(year, '冬至')
+  if (base && date < base) base = termDate(year - 1, '冬至')
+  else if (!base) base = termDate(year - 1, '冬至')
+  if (!base) return null
+  const offset = Math.round((date.getTime() - base.getTime()) / 86400000)
+  if (offset < 0 || offset >= 81) return null
+  return NINE[Math.floor(offset / 9)] ?? null
+}
+
+/** 三伏：初伏 = 夏至后第 3 个庚日，末伏 = 立秋后第 1 个庚日，出伏 = 末伏后第 10 天 */
+export function getDogDayLabel(year: number, month: number, day: number): string | null {
+  const date = new Date(year, month - 1, day)
+  const summerSolstice = termDate(year, '夏至')
+  const autumnStart = termDate(year, '立秋')
+  if (!summerSolstice || !autumnStart) return null
+
+  // 夏至当天起数庚日（当天是庚日则计为第 1 个）
+  const gengs: Date[] = []
+  for (let k = 0; k < 40 && gengs.length < 4; k++) {
+    const d = addDays(summerSolstice, k)
+    if (isGanDay(d, 6)) gengs.push(d)
+  }
+  if (gengs.length < 4) return null
+  const first = gengs[2] // 初伏
+  const middle = gengs[3] // 中伏起
+
+  let last: Date | null = null
+  for (let k = 0; k < 20; k++) {
+    const d = addDays(autumnStart, k)
+    if (isGanDay(d, 6)) { last = d; break }
+  }
+  if (!last) return null
+  const outOfDogDays = addDays(last, 10)
+
+  if (sameDay(date, outOfDogDays)) return '出伏'
+  if (date >= first && date < middle) return '初伏'
+  if (date >= middle && date < last) return '中伏'
+  if (date >= last && date < outOfDogDays) return '末伏'
+  return null
+}
+
+/** 挂在节气上的节日：丰收节（秋分当天）、春社日（立春后第 5 个戊日） */
+function getTermAnchoredFestival(year: number, month: number, day: number, solarTerm: string | null): string | null {
+  if (solarTerm === '秋分') return '丰收节'
+  const lichun = termDate(year, '立春')
+  if (!lichun) return null
+  const date = new Date(year, month - 1, day)
+  if (date < lichun) return null
+  let count = 0
+  for (let k = 0; k < 60; k++) {
+    const d = addDays(lichun, k)
+    if (!isGanDay(d, 4)) continue
+    count++
+    if (count === 5) return sameDay(d, date) ? '春社日' : null
+  }
+  return null
+}
+
 /** 农历年天数 */
 function lYearDays(y: number): number {
   let sum = 348
@@ -189,8 +288,8 @@ function monthDays(y: number, m: number): number {
   return (info & (0x10000 >> m)) ? 30 : 29
 }
 
-/** 副标题类型：节日 / 节气 / 农历日 */
-export type DayLabelKind = 'festival' | 'term' | 'lunarDay'
+/** 副标题类型：节日 / 节气 / 数九三伏 / 农历日 */
+export type DayLabelKind = 'festival' | 'term' | 'seasonal' | 'lunarDay'
 
 export interface LunarDateResult {
   lunarYear: number
@@ -205,6 +304,8 @@ export interface LunarDateResult {
   isSpecial: boolean
   /** 副标题类型，供 UI 分别着色 */
   kind: DayLabelKind
+  /** 第二行副标题（节日与节气撞同一天时，节气显示在第二行） */
+  extra?: { text: string; kind: DayLabelKind }
 }
 
 /** 公历日期转农历信息 */
@@ -260,33 +361,31 @@ export function getLunarInfo(year: number, month: number, day: number): LunarDat
   const ldd = String(lunarDay).padStart(2, '0')
   const lunarKey = `${lmm}${ldd}`
 
-  // 优先级：节日（浮动 / 公历 / 农历 / 除夕）> 节气 > 农历日
+  // 优先级：节日（浮动 / 节气锚定 / 公历 / 农历 / 除夕）> 节气 > 月首 > 数九三伏 > 农历日
   const weekdayFestival = getWeekdayFestival(year, month, day)
   const solarFestival = SOLAR_FESTIVALS[solarKey]
   const lunarFestival = LUNAR_FESTIVALS[lunarKey]
   const isLunarEve = !isLeap && lunarMonth === 12 && lunarDay === monthDays(lunarYear, 12)
   const solarTerm = getSolarTerm(year, month, day)
+  const termFestival = getTermAnchoredFestival(year, month, day, solarTerm)
+  const festival =
+    weekdayFestival ||
+    termFestival ||
+    solarFestival ||
+    lunarFestival ||
+    (isLunarEve ? '除夕' : null)
 
   let festivalOrDay = ''
   let isSpecial = false
   let kind: DayLabelKind = 'lunarDay'
+  let extra: { text: string; kind: DayLabelKind } | undefined
 
-  if (weekdayFestival) {
-    festivalOrDay = weekdayFestival
+  if (festival) {
+    festivalOrDay = festival
     isSpecial = true
     kind = 'festival'
-  } else if (solarFestival) {
-    festivalOrDay = solarFestival
-    isSpecial = true
-    kind = 'festival'
-  } else if (lunarFestival) {
-    festivalOrDay = lunarFestival
-    isSpecial = true
-    kind = 'festival'
-  } else if (isLunarEve) {
-    festivalOrDay = '除夕'
-    isSpecial = true
-    kind = 'festival'
+    // 节日与节气撞同一天：节气走第二行
+    if (solarTerm && solarTerm !== festival) extra = { text: solarTerm, kind: 'term' }
   } else if (solarTerm) {
     festivalOrDay = solarTerm
     isSpecial = true
@@ -296,8 +395,14 @@ export function getLunarInfo(year: number, month: number, day: number): LunarDat
     isSpecial = true
     kind = 'lunarDay'
   } else {
-    festivalOrDay = LUNAR_DAY_NAMES[lunarDay - 1] ?? `${lunarDay}日`
-    kind = 'lunarDay'
+    const seasonal = getNinthLabel(year, month, day) ?? getDogDayLabel(year, month, day)
+    if (seasonal) {
+      festivalOrDay = seasonal
+      kind = 'seasonal'
+    } else {
+      festivalOrDay = LUNAR_DAY_NAMES[lunarDay - 1] ?? `${lunarDay}日`
+      kind = 'lunarDay'
+    }
   }
 
   return {
@@ -310,5 +415,6 @@ export function getLunarInfo(year: number, month: number, day: number): LunarDat
     festivalOrDay,
     isSpecial,
     kind,
+    extra,
   }
 }

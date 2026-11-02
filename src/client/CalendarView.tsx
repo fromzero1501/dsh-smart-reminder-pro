@@ -11,6 +11,7 @@
 import { createElement, Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReminderItem } from '../core/types.ts'
 import { getLunarInfo } from '../core/lunar.ts'
+import { getStatutoryMark } from '../core/statutory.ts'
 import { parseQuickAdd } from '../core/quick-parser.ts'
 import type { ReminderApi } from './api.ts'
 import { CalendarClockIcon } from './icons.tsx'
@@ -479,16 +480,19 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
         textLunarSpecial: '#fbbf24',
         textFestival: '#f87171',
         textSolarTerm: '#4ade80',
+        textSeasonal: '#cbd5e1',
         textWeekend: '#f87171',
         todayBg: '#c62f2f',
         todayText: '#ffffff',
+        restBg: '#ef4444',
+        workBg: '#94a3b8',
         btnSecondaryBg: '#334155',
         btnSecondaryBorder: '#475569',
         rightPanelBg: '#0f172a',
         cellBgCurrent: '#0f172a',
         cellBgOther: '#090d16',
-        cellSelectedBg: '#1e3a8a',
-        cellSelectedBorder: '#3b82f6',
+        cellSelectedBg: '#3f1113',
+        cellSelectedBorder: '#ef4444',
         cardBg: '#1e293b',
         inputBg: '#0f172a',
         presetBg: '#334155',
@@ -509,9 +513,12 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
         textLunarSpecial: '#d97706',
         textFestival: '#c62f2f',
         textSolarTerm: '#15803d',
+        textSeasonal: '#475569',
         textWeekend: '#c62f2f',
         todayBg: '#c62f2f',
         todayText: '#ffffff',
+        restBg: '#c62f2f',
+        workBg: '#64748b',
         btnSecondaryBg: '#f1f5f9',
         btnSecondaryBorder: '#cbd5e1',
         rightPanelBg: '#f8fafc',
@@ -861,7 +868,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
           // 日历网格
           createElement(
             'div',
-            { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', flex: 1 } },
+            { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: '1fr', gap: '6px', flex: 1, minHeight: 0 } },
             calendarCells.map((cell) => {
               const mm = String(cell.month).padStart(2, '0')
               const dd = String(cell.day).padStart(2, '0')
@@ -869,13 +876,15 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
 
               let subtitle = ''
               let isSpecial = false
-              let labelKind: 'festival' | 'term' | 'lunarDay' = 'lunarDay'
+              let labelKind: 'festival' | 'term' | 'seasonal' | 'lunarDay' = 'lunarDay'
+              let extraSubtitle: { text: string; kind: 'festival' | 'term' | 'seasonal' | 'lunarDay' } | undefined
 
               if (lang === 'zh') {
                 const lunar = getLunarInfo(cell.year, cell.month, cell.day)
                 subtitle = lunar.festivalOrDay
                 isSpecial = lunar.isSpecial
                 labelKind = lunar.kind
+                extraSubtitle = lunar.extra
               } else {
                 const globalFest = GLOBAL_SOLAR_FESTIVALS[solarKey]
                 if (globalFest) {
@@ -891,6 +900,17 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
               const isSelected = selectedDate === cell.dateKey
               const isToday = formatDateKey(new Date()) === cell.dateKey
               const isDragOver = dragOverDate === cell.dateKey
+              const statutory = getStatutoryMark(cell.year, cell.month, cell.day)
+              const colorFor = (k: 'festival' | 'term' | 'seasonal' | 'lunarDay') =>
+                isToday
+                  ? theme.todayText
+                  : k === 'festival'
+                    ? theme.textFestival
+                    : k === 'term'
+                      ? theme.textSolarTerm
+                      : k === 'seasonal'
+                        ? theme.textSeasonal
+                        : theme.textLunarMuted
               const pendingCount = items.filter((i) => i.dueTimeStr.startsWith(cell.dateKey) && i.status === 'pending').length
               const hasCompleted = items.some((i) => i.dueTimeStr.startsWith(cell.dateKey) && i.status === 'completed')
 
@@ -914,12 +934,15 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                   },
                   style: {
                     padding: '2px',
-                    borderRadius: '14px',
-                    backgroundColor: isSelected ? theme.cellSelectedBg : 'transparent',
+                    borderRadius: '12px',
+                    // 今天整格红底（含边框位置）；手动选中只给红框 + 淡红底
+                    backgroundColor: isToday ? theme.todayBg : isSelected ? theme.cellSelectedBg : 'transparent',
                     borderWidth: '2px',
                     borderStyle: 'solid',
                     borderColor: isSelected
-                      ? theme.cellSelectedBorder
+                      ? isToday
+                        ? theme.todayText
+                        : theme.cellSelectedBorder
                       : isDragOver
                         ? '#3b82f6'
                         : 'transparent',
@@ -927,12 +950,38 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    minHeight: '78px',
+                    height: '100%',
+                    minHeight: 0,
+                    minWidth: 0,
                     boxSizing: 'border-box',
                     position: 'relative',
                     opacity: cell.isCurrentMonth ? 1 : 0.35,
                   },
                 },
+                // 法定节假日角标：左上角 休 / 班
+                statutory
+                  ? createElement(
+                      'span',
+                      {
+                        style: {
+                          position: 'absolute',
+                          top: '1px',
+                          left: '1px',
+                          fontSize: '10px',
+                          lineHeight: '14px',
+                          padding: '0 3px',
+                          borderRadius: '5px',
+                          backgroundColor: statutory === 'rest' ? theme.restBg : theme.workBg,
+                          color: '#fff',
+                          fontWeight: 700,
+                          transform: 'scale(0.92)',
+                          transformOrigin: 'top left',
+                          pointerEvents: 'none',
+                        },
+                      },
+                      statutory === 'rest' ? '休' : '班',
+                    )
+                  : null,
                 // 待办角标 / 已完成标记：绝对定位在右上角
                 pendingCount > 0
                   ? createElement(
@@ -969,7 +1018,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                         '✓',
                       )
                     : null,
-                // 数字 + 副标题（今天整块红底白字）
+                // 数字 + 副标题（今天整格红底白字；节日与节气撞车时显示两行）
                 createElement(
                   'div',
                   {
@@ -979,11 +1028,9 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '0px',
-                      padding: '5px 4px',
-                      minWidth: '52px',
+                      padding: '2px 2px',
                       maxWidth: '100%',
-                      borderRadius: '14px',
-                      backgroundColor: isToday ? theme.todayBg : 'transparent',
+                      minWidth: 0,
                       boxSizing: 'border-box',
                     },
                   },
@@ -992,7 +1039,7 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                     {
                       style: {
                         fontSize: '27px',
-                        lineHeight: '1.1',
+                        lineHeight: '1.05',
                         fontWeight: isToday ? 600 : 500,
                         color: isToday ? theme.todayText : isWeekend ? theme.textWeekend : theme.textPrimary,
                       },
@@ -1005,15 +1052,9 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                         {
                           style: {
                             fontSize: '12px',
-                            lineHeight: '1.25',
-                            color: isToday
-                              ? theme.todayText
-                              : labelKind === 'festival'
-                                ? theme.textFestival
-                                : labelKind === 'term'
-                                  ? theme.textSolarTerm
-                                  : theme.textLunarMuted,
-                            fontWeight: labelKind === 'lunarDay' ? 400 : 600,
+                            lineHeight: '1.3',
+                            color: colorFor(labelKind),
+                            fontWeight: labelKind === 'festival' || labelKind === 'term' ? 600 : 400,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -1022,7 +1063,26 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                         },
                         subtitle,
                       )
-                    : createElement('span', { style: { height: '15px' } }),
+                    : createElement('span', { style: { height: '16px' } }),
+                  extraSubtitle
+                    ? createElement(
+                        'span',
+                        {
+                          style: {
+                            fontSize: '11px',
+                            lineHeight: '1.2',
+                            color: colorFor(extraSubtitle.kind),
+                            opacity: isToday ? 0.92 : 1,
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '100%',
+                          },
+                        },
+                        extraSubtitle.text,
+                      )
+                    : null,
                 ),
               )
             }),
