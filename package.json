@@ -1,7 +1,7 @@
 {
   "name": "dsh-smart-reminder",
-  "version": "0.1.29",
-  "description": "Smart calendar reminder & schedule assistant for DSH Web GUI: lunar calendar, holidays, system notifications on macOS/Windows, and WeCom/platform push integration.",
+  "version": "0.1.30",
+  "description": "Smart calendar reminder & schedule assistant for DSH Web GUI (pro fork): large centered date numbers, full 24 solar terms, extended Chinese festivals, today highlighted in red.",
   "license": "MIT",
   "author": "Jaden Tang <jaden.tang@sjfood.com>",
   "type": "module",
@@ -65,9 +65,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/a792883583/dsh-smart-reminder.git"
+    "url": "git+https://github.com/fromzero1501/dsh-smart-reminder-pro.git"
   },
-  "homepage": "https://github.com/a792883583/dsh-smart-reminder",
+  "homepage": "https://github.com/fromzero1501/dsh-smart-reminder-pro",
   "keywords": [
     "dsh",
     "plugin",
@@ -80,5 +80,13 @@
   ],
   "engines": {
     "node": ">=22"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/fromzero1501/dsh-smart-reminder-pro/issues"
+  },
+  "contributors": [
+    {
+      "name": "fromzero1501"
+    }
+  ]
 }

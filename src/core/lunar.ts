@@ -37,17 +37,33 @@ const SOLAR_FESTIVALS: Record<string, string> = {
   '0214': '情人节',
   '0308': '妇女节',
   '0312': '植树节',
+  '0315': '消费者权益日',
   '0401': '愚人节',
+  '0422': '世界地球日',
+  '0423': '世界读书日',
   '0501': '劳动节',
   '0504': '青年节',
+  '0512': '护士节',
+  '0531': '世界无烟日',
   '0601': '儿童节',
+  '0605': '世界环境日',
+  '0626': '国际禁毒日',
   '0701': '建党节',
   '0801': '建军节',
+  '0903': '抗战胜利纪念日',
   '0910': '教师节',
   '1001': '国庆节',
   '1024': '程序员节',
+  '1031': '万圣节',
+  '1108': '记者节',
+  '1109': '消防日',
+  '1111': '光棍节',
+  '1201': '世界艾滋病日',
+  '1204': '国家宪法日',
+  '1213': '国家公祭日',
   '1224': '平安夜',
   '1225': '圣诞节',
+  '1231': '跨年夜',
 }
 
 /** 固定农历节日 (MMDD) */
@@ -55,13 +71,90 @@ const LUNAR_FESTIVALS: Record<string, string> = {
   '0101': '春节',
   '0115': '元宵节',
   '0202': '龙抬头',
+  '0303': '上巳节',
   '0505': '端午节',
   '0707': '七夕节',
   '0715': '中元节',
   '0815': '中秋节',
   '0909': '重阳节',
+  '1001': '寒衣节',
+  '1015': '下元节',
   '1208': '腊八节',
   '1223': '小年',
+}
+
+/** 浮动公历节日：某月第 n 个星期几 */
+const WEEKDAY_FESTIVALS: Array<{ month: number; weekday: number; nth: number; name: string }> = [
+  { month: 5, weekday: 0, nth: 2, name: '母亲节' },
+  { month: 6, weekday: 0, nth: 3, name: '父亲节' },
+  { month: 11, weekday: 4, nth: 4, name: '感恩节' },
+]
+
+/** 二十四节气名（按公历年内顺序，从小寒起） */
+const SOLAR_TERM_NAMES = [
+  '小寒', '大寒', '立春', '雨水', '惊蛰', '春分', '清明', '谷雨',
+  '立夏', '小满', '芒种', '夏至', '小暑', '大暑', '立秋', '处暑',
+  '白露', '秋分', '寒露', '霜降', '立冬', '小雪', '大雪', '冬至',
+]
+
+/** 节气计算有效年份（与农历年表一致） */
+const TERM_MIN_YEAR = 1900
+const TERM_MAX_YEAR = 2100
+
+/** 太阳视黄经（度），低精度算法，误差约 0.01° */
+function sunApparentLongitude(jd: number): number {
+  const T = (jd - 2451545.0) / 36525
+  const L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T
+  const M = ((357.52911 + 35999.05029 * T - 0.0001537 * T * T) * Math.PI) / 180
+  const C =
+    (1.914602 - 0.004817 * T - 0.000014 * T * T) * Math.sin(M) +
+    (0.019993 - 0.000101 * T) * Math.sin(2 * M) +
+    0.000289 * Math.sin(3 * M)
+  const omega = ((125.04 - 1934.136 * T) * Math.PI) / 180
+  const lon = L0 + C - 0.00569 - 0.00478 * Math.sin(omega)
+  return ((lon % 360) + 360) % 360
+}
+
+const solarTermCache = new Map<number, Record<string, string>>()
+
+/** 计算某年 24 节气的公历日期（北京时间），返回 { MMDD: 节气名 } */
+function computeSolarTerms(year: number): Record<string, string> {
+  const cached = solarTermCache.get(year)
+  if (cached) return cached
+  const map: Record<string, string> = {}
+  for (let idx = 0; idx < 24; idx++) {
+    // 小寒 285°，此后每个节气黄经 +15°
+    const target = (285 + 15 * idx) % 360
+    let jd = Date.UTC(year, Math.floor(idx / 2), 6) / 86400000 + 2440587.5
+    for (let k = 0; k < 60; k++) {
+      const lon = sunApparentLongitude(jd)
+      const diff = ((target - lon + 540) % 360) - 180
+      jd += diff / 0.9856473
+      if (Math.abs(diff) < 1e-7) break
+    }
+    const bj = new Date((jd - 2440587.5) * 86400000 + 8 * 3600000)
+    const key = `${String(bj.getUTCMonth() + 1).padStart(2, '0')}${String(bj.getUTCDate()).padStart(2, '0')}`
+    map[key] = SOLAR_TERM_NAMES[idx]
+  }
+  solarTermCache.set(year, map)
+  return map
+}
+
+/** 查某天是否是节气，是则返回节气名（1900–2100 之外返回 null） */
+export function getSolarTerm(year: number, month: number, day: number): string | null {
+  if (year < TERM_MIN_YEAR || year > TERM_MAX_YEAR) return null
+  const key = `${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`
+  return computeSolarTerms(year)[key] ?? null
+}
+
+/** 查某天是否命中"第 n 个星期几"类节日 */
+function getWeekdayFestival(year: number, month: number, day: number): string | null {
+  const dow = new Date(year, month - 1, day).getDay()
+  const nth = Math.floor((day - 1) / 7) + 1
+  for (const f of WEEKDAY_FESTIVALS) {
+    if (f.month === month && f.weekday === dow && f.nth === nth) return f.name
+  }
+  return null
 }
 
 /** 农历年天数 */
@@ -96,6 +189,9 @@ function monthDays(y: number, m: number): number {
   return (info & (0x10000 >> m)) ? 30 : 29
 }
 
+/** 副标题类型：节日 / 节气 / 农历日 */
+export type DayLabelKind = 'festival' | 'term' | 'lunarDay'
+
 export interface LunarDateResult {
   lunarYear: number
   lunarMonth: number
@@ -107,6 +203,8 @@ export interface LunarDateResult {
   festivalOrDay: string
   /** 是否是节日或初一（突出显示） */
   isSpecial: boolean
+  /** 副标题类型，供 UI 分别着色 */
+  kind: DayLabelKind
 }
 
 /** 公历日期转农历信息 */
@@ -162,23 +260,44 @@ export function getLunarInfo(year: number, month: number, day: number): LunarDat
   const ldd = String(lunarDay).padStart(2, '0')
   const lunarKey = `${lmm}${ldd}`
 
+  // 优先级：节日（浮动 / 公历 / 农历 / 除夕）> 节气 > 农历日
+  const weekdayFestival = getWeekdayFestival(year, month, day)
   const solarFestival = SOLAR_FESTIVALS[solarKey]
   const lunarFestival = LUNAR_FESTIVALS[lunarKey]
+  const isLunarEve = !isLeap && lunarMonth === 12 && lunarDay === monthDays(lunarYear, 12)
+  const solarTerm = getSolarTerm(year, month, day)
 
   let festivalOrDay = ''
   let isSpecial = false
+  let kind: DayLabelKind = 'lunarDay'
 
-  if (solarFestival) {
+  if (weekdayFestival) {
+    festivalOrDay = weekdayFestival
+    isSpecial = true
+    kind = 'festival'
+  } else if (solarFestival) {
     festivalOrDay = solarFestival
     isSpecial = true
+    kind = 'festival'
   } else if (lunarFestival) {
     festivalOrDay = lunarFestival
     isSpecial = true
+    kind = 'festival'
+  } else if (isLunarEve) {
+    festivalOrDay = '除夕'
+    isSpecial = true
+    kind = 'festival'
+  } else if (solarTerm) {
+    festivalOrDay = solarTerm
+    isSpecial = true
+    kind = 'term'
   } else if (lunarDay === 1) {
     festivalOrDay = `${LUNAR_MONTH_NAMES[lunarMonth - 1]}月`
     isSpecial = true
+    kind = 'lunarDay'
   } else {
     festivalOrDay = LUNAR_DAY_NAMES[lunarDay - 1] ?? `${lunarDay}日`
+    kind = 'lunarDay'
   }
 
   return {
@@ -190,5 +309,6 @@ export function getLunarInfo(year: number, month: number, day: number): LunarDat
     lunarDayStr: LUNAR_DAY_NAMES[lunarDay - 1] ?? '',
     festivalOrDay,
     isSpecial,
+    kind,
   }
 }

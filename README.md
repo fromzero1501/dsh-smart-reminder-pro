@@ -4,6 +4,26 @@ DSH Web GUI 通用智能提醒、农历日历看板与待办清单助手插件�
 
 [English Documentation](./README.en.md) | [Documentación en Español](./README.es.md)
 
+## 关于本仓库（Pro 版增强）
+
+**dsh-smart-reminder-pro** 是上游 [dsh-smart-reminder](https://github.com/a792883583/dsh-smart-reminder)（MIT，作者 Jaden Tang）的功能增强分支。原有能力全部保留（顶部速记栏、农历、拖拽改期、5 秒撤销、.ics 导出、系统通知、Agent 工具、平台推送），只重做日历格子的版式与节日数据：
+
+- **格子版式**：去掉卡片边框与底色，日期数字 13px → 27px 并居中；周末数字红色；非当月日期淡化；待办角标与完成勾移到右上角。
+- **今天高亮**：今天整块红底（#c62f2f）白字；手动选中的日期仍是 2px 蓝色描边 + 淡蓝底，两者叠加时红底白字 + 蓝框。
+- **副标题三色**：节日红字、二十四节气绿字、普通农历日灰色。同一格只显示一条，优先级为 节日 > 节气 > 农历日。
+- **二十四节气全量**：内置节气计算（太阳视黄经低精度算法，1900–2100 有效；个别年份可能相差一天，节气之外的范围不显示）。
+- **节日扩充**：固定公历节日 31 条、农历节日 14 条（含按当年农历大小月现算的除夕）、浮动节日 3 条（母亲节、父亲节、感恩节）。
+- **不变的部分**：host 侧 API、reminders.json 存储、调度与漏发补发、Toast 通知、5 个 Agent 工具、侧栏按钮挂载逻辑均未改动；不内置法定节假日调休表。
+
+### 构建与本地覆盖
+
+```bash
+pnpm install
+pnpm build     # 产出 lib/index.js（host）+ lib/client.js（浏览器端 bundle）
+```
+
+包名保持 `dsh-smart-reminder`，构建产物可直接覆盖 profile 里 `node_modules/dsh-smart-reminder` 的同名插件后重启 DSH。
+
 ## 界面预览 (UI Preview)
 
 ### 1. 全屏日历看板与待办流转 (Calendar Dashboard)

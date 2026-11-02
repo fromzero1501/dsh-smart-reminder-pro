@@ -60,8 +60,7 @@ const ANIMATION_STYLES = `
               box-shadow 0.16s ease;
 }
 .dsh-rem-cell:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background-color: rgba(148, 163, 184, 0.16);
   z-index: 2;
 }
 
@@ -478,6 +477,11 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
         textMuted: '#94a3b8',
         textLunarMuted: '#64748b',
         textLunarSpecial: '#fbbf24',
+        textFestival: '#f87171',
+        textSolarTerm: '#4ade80',
+        textWeekend: '#f87171',
+        todayBg: '#c62f2f',
+        todayText: '#ffffff',
         btnSecondaryBg: '#334155',
         btnSecondaryBorder: '#475569',
         rightPanelBg: '#0f172a',
@@ -503,6 +507,11 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
         textMuted: '#64748b',
         textLunarMuted: '#94a3b8',
         textLunarSpecial: '#d97706',
+        textFestival: '#c62f2f',
+        textSolarTerm: '#15803d',
+        textWeekend: '#c62f2f',
+        todayBg: '#c62f2f',
+        todayText: '#ffffff',
         btnSecondaryBg: '#f1f5f9',
         btnSecondaryBorder: '#cbd5e1',
         rightPanelBg: '#f8fafc',
@@ -860,18 +869,24 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
 
               let subtitle = ''
               let isSpecial = false
+              let labelKind: 'festival' | 'term' | 'lunarDay' = 'lunarDay'
 
               if (lang === 'zh') {
                 const lunar = getLunarInfo(cell.year, cell.month, cell.day)
                 subtitle = lunar.festivalOrDay
                 isSpecial = lunar.isSpecial
+                labelKind = lunar.kind
               } else {
                 const globalFest = GLOBAL_SOLAR_FESTIVALS[solarKey]
                 if (globalFest) {
                   subtitle = globalFest[lang] || globalFest.en
                   isSpecial = true
+                  labelKind = 'festival'
                 }
               }
+
+              const weekday = new Date(cell.year, cell.month - 1, cell.day).getDay()
+              const isWeekend = weekday === 0 || weekday === 6
 
               const isSelected = selectedDate === cell.dateKey
               const isToday = formatDateKey(new Date()) === cell.dateKey
@@ -898,66 +913,117 @@ export function CalendarView(props: { api: ReminderApi; onClose: () => void }): 
                     void handleDropOnDate(cell.dateKey)
                   },
                   style: {
-                    padding: '6px 4px',
-                    borderRadius: '8px',
-                    backgroundColor: isSelected
-                      ? theme.cellSelectedBg
-                      : cell.isCurrentMonth
-                        ? theme.cellBgCurrent
-                        : theme.cellBgOther,
+                    padding: '2px',
+                    borderRadius: '14px',
+                    backgroundColor: isSelected ? theme.cellSelectedBg : 'transparent',
                     borderWidth: '2px',
                     borderStyle: 'solid',
                     borderColor: isSelected
                       ? theme.cellSelectedBorder
                       : isDragOver
                         ? '#3b82f6'
-                        : isDark
-                          ? theme.borderLight
-                          : theme.border,
-                    boxShadow: !isDark && cell.isCurrentMonth && !isSelected ? '0 1px 2px rgba(0,0,0,0.02)' : 'none',
+                        : 'transparent',
                     cursor: 'pointer',
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    minHeight: '58px',
+                    justifyContent: 'center',
+                    minHeight: '78px',
                     boxSizing: 'border-box',
+                    position: 'relative',
                     opacity: cell.isCurrentMonth ? 1 : 0.35,
                   },
                 },
+                // 待办角标 / 已完成标记：绝对定位在右上角
+                pendingCount > 0
+                  ? createElement(
+                      'span',
+                      {
+                        style: {
+                          position: 'absolute',
+                          top: '0px',
+                          right: '-2px',
+                          fontSize: '10px',
+                          backgroundColor: isToday ? 'rgba(255,255,255,0.92)' : '#ef4444',
+                          color: isToday ? theme.todayBg : '#fff',
+                          borderRadius: '10px',
+                          padding: '0 5px',
+                          fontWeight: 700,
+                          boxShadow: '0 2px 4px rgba(239,68,68,0.3)',
+                        },
+                      },
+                      pendingCount,
+                    )
+                  : hasCompleted
+                    ? createElement(
+                        'span',
+                        {
+                          style: {
+                            position: 'absolute',
+                            top: '0px',
+                            right: '0px',
+                            fontSize: '10px',
+                            color: isToday ? theme.todayText : '#10b981',
+                            fontWeight: 700,
+                          },
+                        },
+                        '✓',
+                      )
+                    : null,
+                // 数字 + 副标题（今天整块红底白字）
                 createElement(
                   'div',
-                  { style: { display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px', boxSizing: 'border-box' } },
-                  createElement(
-                    'div',
-                    { style: { display: 'flex', alignItems: 'center', gap: '3px' } },
-                    createElement('span', { style: { fontSize: '13px', fontWeight: isToday ? 700 : 500, color: isToday ? '#2563eb' : theme.textPrimary } }, cell.day),
-                    isToday ? createElement('span', { style: { width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#2563eb', display: 'inline-block' } }) : null,
-                  ),
-                  pendingCount > 0 ? (
-                    createElement('span', { style: { fontSize: '10px', backgroundColor: '#ef4444', color: '#fff', borderRadius: '10px', padding: '0 5px', fontWeight: 700, boxShadow: '0 2px 4px rgba(239,68,68,0.3)' } }, pendingCount)
-                  ) : hasCompleted ? (
-                    createElement('span', { style: { fontSize: '10px', color: '#10b981', fontWeight: 700 } }, '✓')
-                  ) : null,
-                ),
-                subtitle ? (
+                  {
+                    style: {
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0px',
+                      padding: '5px 4px',
+                      minWidth: '52px',
+                      maxWidth: '100%',
+                      borderRadius: '14px',
+                      backgroundColor: isToday ? theme.todayBg : 'transparent',
+                      boxSizing: 'border-box',
+                    },
+                  },
                   createElement(
                     'span',
                     {
                       style: {
-                        fontSize: '10px',
-                        color: isSpecial ? theme.textLunarSpecial : theme.textLunarMuted,
-                        fontWeight: isSpecial ? 600 : 400,
-                        marginTop: '0px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: '92%',
+                        fontSize: '27px',
+                        lineHeight: '1.1',
+                        fontWeight: isToday ? 600 : 500,
+                        color: isToday ? theme.todayText : isWeekend ? theme.textWeekend : theme.textPrimary,
                       },
                     },
-                    subtitle,
-                  )
-                ) : createElement('span', { style: { height: '12px' } }),
+                    cell.day,
+                  ),
+                  subtitle
+                    ? createElement(
+                        'span',
+                        {
+                          style: {
+                            fontSize: '12px',
+                            lineHeight: '1.25',
+                            color: isToday
+                              ? theme.todayText
+                              : labelKind === 'festival'
+                                ? theme.textFestival
+                                : labelKind === 'term'
+                                  ? theme.textSolarTerm
+                                  : theme.textLunarMuted,
+                            fontWeight: labelKind === 'lunarDay' ? 400 : 600,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '100%',
+                          },
+                        },
+                        subtitle,
+                      )
+                    : createElement('span', { style: { height: '15px' } }),
+                ),
               )
             }),
           ),
